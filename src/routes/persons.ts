@@ -3,6 +3,11 @@ import { z } from "zod";
 
 import { requireAuthenticatedUser } from "../auth.js";
 
+import {
+  createPersonSchema,
+  updatePersonSchema,
+} from "../schemas/persons.js";
+
 const querySchema = z.object({
   page: z.coerce
     .number()
@@ -17,22 +22,27 @@ const querySchema = z.object({
     .max(100)
     .default(20),
 
-  search: z.string()
+  search: z
+    .string()
     .trim()
     .min(1)
     .max(120)
     .optional(),
 
-  status: z.enum([
-    "ACTIVE",
-    "INACTIVE",
-    "ARCHIVED",
-  ]).optional(),
+  status: z
+    .enum([
+      "ACTIVE",
+      "INACTIVE",
+      "ARCHIVED",
+    ])
+    .optional(),
 
-  type: z.enum([
-    "INDIVIDUAL",
-    "ORGANIZATION",
-  ]).optional(),
+  type: z
+    .enum([
+      "INDIVIDUAL",
+      "ORGANIZATION",
+    ])
+    .optional(),
 });
 
 const paramsSchema = z.object({
@@ -47,98 +57,374 @@ const contextSchema = z.object({
   permissions: z.array(z.string()),
 });
 
-function normalizeSearch(value: string): string {
+function normalizeSearch(
+  value: string
+): string {
   return value
     .replace(/[%_]/g, "")
     .replace(/[(),]/g, " ")
     .trim();
 }
 
-export async function personsRoutes(app: FastifyInstance) {
+export async function personsRoutes(
+  app: FastifyInstance
+) {
   // ==========================================================
   // GET /api/v1/persons
   // ==========================================================
 
-  app.get("/api/v1/persons", async (request, reply) => {
-    const auth = await requireAuthenticatedUser(request);
+  app.get(
+    "/api/v1/persons",
+    async (request, reply) => {
+      const auth =
+        await requireAuthenticatedUser(
+          request
+        );
 
-    if (!auth.ok) {
-      return reply
-        .code(auth.statusCode)
-        .send({ error: auth.error });
-    }
+      if (!auth.ok) {
+        return reply
+          .code(auth.statusCode)
+          .send({
+            error: auth.error,
+          });
+      }
 
-    const parsedQuery = querySchema.safeParse(request.query);
+      const parsedQuery =
+        querySchema.safeParse(
+          request.query
+        );
 
-    if (!parsedQuery.success) {
-      return reply.code(400).send({
-        error: "INVALID_QUERY_PARAMETERS",
-        details: parsedQuery.error.flatten(),
+      if (!parsedQuery.success) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INVALID_QUERY_PARAMETERS",
+            details:
+              parsedQuery.error.flatten(),
+          });
+      }
+
+      const {
+        page,
+        limit,
+        search,
+        status,
+        type,
+      } = parsedQuery.data;
+
+      const {
+        data: contextData,
+        error: contextError,
+      } = await auth.supabase.rpc(
+        "current_user_context"
+      );
+
+      if (contextError) {
+        request.log.error(
+          {
+            code: contextError.code,
+            details:
+              contextError.details,
+            hint: contextError.hint,
+          },
+          "Failed to load institutional context for persons"
+        );
+
+        return reply
+          .code(403)
+          .send({
+            error:
+              "USER_CONTEXT_UNAVAILABLE",
+          });
+      }
+
+      const parsedContext =
+        contextSchema.safeParse(
+          contextData
+        );
+
+      if (!parsedContext.success) {
+        request.log.error(
+          {
+            issues:
+              parsedContext.error.issues,
+          },
+          "Invalid institutional context structure"
+        );
+
+        return reply
+          .code(403)
+          .send({
+            error:
+              "INVALID_USER_CONTEXT",
+          });
+      }
+
+      const {
+        organization,
+        permissions,
+      } = parsedContext.data;
+
+      if (
+        !permissions.includes(
+          "person.read"
+        )
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "PERMISSION_DENIED",
+          });
+      }
+
+      const offset =
+        (page - 1) * limit;
+
+      const end =
+        offset + limit - 1;
+
+      let query = auth.supabase
+        .from("persons")
+        .select(
+          `
+            id,
+            person_type,
+            full_name,
+            preferred_name,
+            birth_date,
+            gender,
+            marital_status,
+            nationality,
+            occupation,
+            cpf,
+            cnpj,
+            rg,
+            rg_issuer,
+            nis,
+            primary_email,
+            primary_phone,
+            status,
+            created_at,
+            updated_at
+          `,
+          {
+            count: "exact",
+          }
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        );
+
+      if (status) {
+        query = query.eq(
+          "status",
+          status
+        );
+      }
+
+      if (type) {
+        query = query.eq(
+          "person_type",
+          type
+        );
+      }
+
+      if (search) {
+        const normalizedSearch =
+          normalizeSearch(search);
+
+        if (
+          normalizedSearch.length >
+          0
+        ) {
+          query = query.or(
+            [
+              `full_name.ilike.%${normalizedSearch}%`,
+              `preferred_name.ilike.%${normalizedSearch}%`,
+              `primary_email.ilike.%${normalizedSearch}%`,
+            ].join(",")
+          );
+        }
+      }
+
+      const {
+        data,
+        error,
+        count,
+      } = await query
+        .order(
+          "full_name",
+          {
+            ascending: true,
+          }
+        )
+        .range(
+          offset,
+          end
+        );
+
+      if (error) {
+        request.log.error(
+          {
+            code: error.code,
+            details:
+              error.details,
+            hint: error.hint,
+            message:
+              error.message,
+          },
+          "Failed to list persons"
+        );
+
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSONS_LIST_FAILED",
+          });
+      }
+
+      const total =
+        count ?? 0;
+
+      const totalPages =
+        total === 0
+          ? 0
+          : Math.ceil(
+              total / limit
+            );
+
+      return reply.send({
+        data: data ?? [],
+
+        pagination: {
+          page,
+          limit,
+          total,
+          totalPages,
+
+          hasPreviousPage:
+            page > 1,
+
+          hasNextPage:
+            page <
+            totalPages,
+        },
+
+        filters: {
+          search:
+            search ?? null,
+
+          status:
+            status ?? null,
+
+          type:
+            type ?? null,
+        },
       });
     }
+  );
 
-    const {
-      page,
-      limit,
-      search,
-      status,
-      type,
-    } = parsedQuery.data;
+  // ==========================================================
+  // GET /api/v1/persons/:id
+  // ==========================================================
 
-    const {
-      data: contextData,
-      error: contextError,
-    } = await auth.supabase.rpc("current_user_context");
+  app.get(
+    "/api/v1/persons/:id",
+    async (request, reply) => {
+      const auth =
+        await requireAuthenticatedUser(
+          request
+        );
 
-    if (contextError) {
-      request.log.error(
-        {
-          code: contextError.code,
-          details: contextError.details,
-          hint: contextError.hint,
-        },
-        "Failed to load institutional context for persons"
+      if (!auth.ok) {
+        return reply
+          .code(auth.statusCode)
+          .send({
+            error: auth.error,
+          });
+      }
+
+      const parsedParams =
+        paramsSchema.safeParse(
+          request.params
+        );
+
+      if (!parsedParams.success) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INVALID_PERSON_ID",
+            details:
+              parsedParams.error.flatten(),
+          });
+      }
+
+      const { id } =
+        parsedParams.data;
+
+      const {
+        data: contextData,
+        error: contextError,
+      } = await auth.supabase.rpc(
+        "current_user_context"
       );
 
-      return reply
-        .code(403)
-        .send({ error: "USER_CONTEXT_UNAVAILABLE" });
-    }
+      if (contextError) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "USER_CONTEXT_UNAVAILABLE",
+          });
+      }
 
-    const parsedContext =
-      contextSchema.safeParse(contextData);
+      const parsedContext =
+        contextSchema.safeParse(
+          contextData
+        );
 
-    if (!parsedContext.success) {
-      request.log.error(
-        {
-          issues: parsedContext.error.issues,
-        },
-        "Invalid institutional context structure"
-      );
+      if (!parsedContext.success) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "INVALID_USER_CONTEXT",
+          });
+      }
 
-      return reply
-        .code(403)
-        .send({ error: "INVALID_USER_CONTEXT" });
-    }
+      const {
+        organization,
+        permissions,
+      } = parsedContext.data;
 
-    const {
-      organization,
-      permissions,
-    } = parsedContext.data;
+      if (
+        !permissions.includes(
+          "person.read"
+        )
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "PERMISSION_DENIED",
+          });
+      }
 
-    if (!permissions.includes("person.read")) {
-      return reply
-        .code(403)
-        .send({ error: "PERMISSION_DENIED" });
-    }
-
-    const offset = (page - 1) * limit;
-    const end = offset + limit - 1;
-
-    let query = auth.supabase
-      .from("persons")
-      .select(
-        `
+      const {
+        data: person,
+        error: personError,
+      } = await auth.supabase
+        .from("persons")
+        .select(`
           id,
           person_type,
           full_name,
@@ -158,372 +444,710 @@ export async function personsRoutes(app: FastifyInstance) {
           status,
           created_at,
           updated_at
-        `,
-        {
-          count: "exact",
-        }
-      )
-      .eq(
-        "organization_id",
-        organization.id
-      )
-      .is(
-        "deleted_at",
-        null
-      );
+        `)
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        )
+        .maybeSingle();
 
-    if (status) {
-      query = query.eq(
-        "status",
-        status
-      );
-    }
-
-    if (type) {
-      query = query.eq(
-        "person_type",
-        type
-      );
-    }
-
-    if (search) {
-      const normalizedSearch =
-        normalizeSearch(search);
-
-      if (normalizedSearch.length > 0) {
-        query = query.or(
-          [
-            `full_name.ilike.%${normalizedSearch}%`,
-            `preferred_name.ilike.%${normalizedSearch}%`,
-            `primary_email.ilike.%${normalizedSearch}%`,
-          ].join(",")
+      if (personError) {
+        request.log.error(
+          {
+            code:
+              personError.code,
+            details:
+              personError.details,
+            hint:
+              personError.hint,
+            message:
+              personError.message,
+          },
+          "Failed to load person details"
         );
+
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_READ_FAILED",
+          });
       }
-    }
 
-    const {
-      data,
-      error,
-      count,
-    } = await query
-      .order(
-        "full_name",
-        {
-          ascending: true,
-        }
-      )
-      .range(
-        offset,
-        end
-      );
+      if (!person) {
+        return reply
+          .code(404)
+          .send({
+            error:
+              "PERSON_NOT_FOUND",
+          });
+      }
 
-    if (error) {
-      request.log.error(
-        {
-          code: error.code,
-          details: error.details,
-          hint: error.hint,
-          message: error.message,
-        },
-        "Failed to list persons"
-      );
+      const {
+        data: addresses,
+        error: addressesError,
+      } = await auth.supabase
+        .from(
+          "person_addresses"
+        )
+        .select(`
+          id,
+          address_type,
+          postal_code,
+          street,
+          street_number,
+          address_complement,
+          neighborhood,
+          city,
+          state_code,
+          country_code,
+          is_primary,
+          created_at,
+          updated_at
+        `)
+        .eq(
+          "person_id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        )
+        .order(
+          "is_primary",
+          {
+            ascending: false,
+          }
+        )
+        .order(
+          "created_at",
+          {
+            ascending: true,
+          }
+        );
 
-      return reply
-        .code(500)
-        .send({ error: "PERSONS_LIST_FAILED" });
-    }
+      if (
+        addressesError
+      ) {
+        request.log.error(
+          {
+            code:
+              addressesError.code,
+            details:
+              addressesError.details,
+            hint:
+              addressesError.hint,
+            message:
+              addressesError.message,
+          },
+          "Failed to load person addresses"
+        );
 
-    const total = count ?? 0;
-    const totalPages =
-      total === 0
-        ? 0
-        : Math.ceil(total / limit);
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_ADDRESSES_READ_FAILED",
+          });
+      }
 
-    return reply.send({
-      data: data ?? [],
+      const {
+        data: relationships,
+        error:
+          relationshipsError,
+      } = await auth.supabase
+        .from(
+          "person_relationships"
+        )
+        .select(`
+          id,
+          related_person_id,
+          relationship_type,
+          is_legal_guardian,
+          is_financial_responsible,
+          starts_at,
+          ends_at,
+          notes,
+          created_at,
+          updated_at
+        `)
+        .eq(
+          "person_id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        )
+        .order(
+          "created_at",
+          {
+            ascending: true,
+          }
+        );
 
-      pagination: {
-        page,
-        limit,
-        total,
-        totalPages,
-        hasPreviousPage: page > 1,
-        hasNextPage: page < totalPages,
-      },
+      if (
+        relationshipsError
+      ) {
+        request.log.error(
+          {
+            code:
+              relationshipsError.code,
+            details:
+              relationshipsError.details,
+            hint:
+              relationshipsError.hint,
+            message:
+              relationshipsError.message,
+          },
+          "Failed to load person relationships"
+        );
 
-      filters: {
-        search: search ?? null,
-        status: status ?? null,
-        type: type ?? null,
-      },
-    });
-  });
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_RELATIONSHIPS_READ_FAILED",
+          });
+      }
 
-  // ==========================================================
-  // GET /api/v1/persons/:id
-  // ==========================================================
+      return reply.send({
+        person,
 
-  app.get("/api/v1/persons/:id", async (request, reply) => {
-    const auth = await requireAuthenticatedUser(request);
+        addresses:
+          addresses ?? [],
 
-    if (!auth.ok) {
-      return reply
-        .code(auth.statusCode)
-        .send({ error: auth.error });
-    }
-
-    const parsedParams =
-      paramsSchema.safeParse(request.params);
-
-    if (!parsedParams.success) {
-      return reply.code(400).send({
-        error: "INVALID_PERSON_ID",
-        details: parsedParams.error.flatten(),
+        relationships:
+          relationships ??
+          [],
       });
     }
+  );
 
-    const {
-      id,
-    } = parsedParams.data;
+  // ==========================================================
+  // POST /api/v1/persons
+  // ==========================================================
 
-    const {
-      data: contextData,
-      error: contextError,
-    } = await auth.supabase.rpc("current_user_context");
+  app.post(
+    "/api/v1/persons",
+    async (request, reply) => {
+      const auth =
+        await requireAuthenticatedUser(
+          request
+        );
 
-    if (contextError) {
-      request.log.error(
-        {
-          code: contextError.code,
-          details: contextError.details,
-          hint: contextError.hint,
-        },
-        "Failed to load institutional context for person details"
+      if (!auth.ok) {
+        return reply
+          .code(auth.statusCode)
+          .send({
+            error: auth.error,
+          });
+      }
+
+      const parsedBody =
+        createPersonSchema.safeParse(
+          request.body
+        );
+
+      if (!parsedBody.success) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INVALID_PERSON_DATA",
+            details:
+              parsedBody.error.flatten(),
+          });
+      }
+
+      const {
+        data: contextData,
+        error: contextError,
+      } = await auth.supabase.rpc(
+        "current_user_context"
       );
 
-      return reply
-        .code(403)
-        .send({ error: "USER_CONTEXT_UNAVAILABLE" });
-    }
+      if (contextError) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "USER_CONTEXT_UNAVAILABLE",
+          });
+      }
 
-    const parsedContext =
-      contextSchema.safeParse(contextData);
+      const parsedContext =
+        contextSchema.safeParse(
+          contextData
+        );
 
-    if (!parsedContext.success) {
-      request.log.error(
-        {
-          issues: parsedContext.error.issues,
-        },
-        "Invalid institutional context structure"
-      );
+      if (!parsedContext.success) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "INVALID_USER_CONTEXT",
+          });
+      }
 
-      return reply
-        .code(403)
-        .send({ error: "INVALID_USER_CONTEXT" });
-    }
+      const {
+        organization,
+        permissions,
+      } = parsedContext.data;
 
-    const {
-      organization,
-      permissions,
-    } = parsedContext.data;
+      if (
+        !permissions.includes(
+          "person.create"
+        )
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "PERMISSION_DENIED",
+          });
+      }
 
-    if (!permissions.includes("person.read")) {
-      return reply
-        .code(403)
-        .send({ error: "PERMISSION_DENIED" });
-    }
+      const payload =
+        parsedBody.data;
 
-    // --------------------------------------------------------
-    // Pessoa
-    // --------------------------------------------------------
+      const {
+        data,
+        error,
+      } = await auth.supabase
+        .from("persons")
+        .insert({
+          organization_id:
+            organization.id,
 
-    const {
-      data: person,
-      error: personError,
-    } = await auth.supabase
-      .from("persons")
-      .select(`
-        id,
-        person_type,
-        full_name,
-        preferred_name,
-        birth_date,
-        gender,
-        marital_status,
-        nationality,
-        occupation,
-        cpf,
-        cnpj,
-        rg,
-        rg_issuer,
-        nis,
-        primary_email,
-        primary_phone,
-        status,
-        created_at,
-        updated_at
-      `)
-      .eq(
-        "id",
-        id
-      )
-      .eq(
-        "organization_id",
-        organization.id
-      )
-      .is(
-        "deleted_at",
-        null
-      )
-      .maybeSingle();
+          person_type:
+            payload.person_type,
 
-    if (personError) {
-      request.log.error(
-        {
-          code: personError.code,
-          details: personError.details,
-          hint: personError.hint,
-          message: personError.message,
-        },
-        "Failed to load person details"
-      );
+          full_name:
+            payload.full_name,
 
-      return reply
-        .code(500)
-        .send({ error: "PERSON_READ_FAILED" });
-    }
+          preferred_name:
+            payload.preferred_name ??
+            null,
 
-    if (!person) {
-      return reply
-        .code(404)
-        .send({ error: "PERSON_NOT_FOUND" });
-    }
+          birth_date:
+            payload.birth_date ??
+            null,
 
-    // --------------------------------------------------------
-    // Endereços
-    // --------------------------------------------------------
+          gender:
+            payload.gender ??
+            null,
 
-    const {
-      data: addresses,
-      error: addressesError,
-    } = await auth.supabase
-      .from("person_addresses")
-      .select(`
-        id,
-        address_type,
-        postal_code,
-        street,
-        street_number,
-        address_complement,
-        neighborhood,
-        city,
-        state_code,
-        country_code,
-        is_primary,
-        created_at,
-        updated_at
-      `)
-      .eq(
-        "person_id",
-        id
-      )
-      .eq(
-        "organization_id",
-        organization.id
-      )
-      .is(
-        "deleted_at",
-        null
-      )
-      .order(
-        "is_primary",
-        {
-          ascending: false,
+          marital_status:
+            payload.marital_status ??
+            null,
+
+          nationality:
+            payload.nationality ??
+            null,
+
+          occupation:
+            payload.occupation ??
+            null,
+
+          cpf:
+            payload.cpf ??
+            null,
+
+          cnpj:
+            payload.cnpj ??
+            null,
+
+          rg:
+            payload.rg ??
+            null,
+
+          rg_issuer:
+            payload.rg_issuer ??
+            null,
+
+          nis:
+            payload.nis ??
+            null,
+
+          primary_email:
+            payload.primary_email ??
+            null,
+
+          primary_phone:
+            payload.primary_phone ??
+            null,
+
+          status:
+            payload.status ??
+            "ACTIVE",
+
+          created_by:
+            auth.user.id,
+
+          updated_by:
+            auth.user.id,
+        })
+        .select()
+        .single();
+
+      if (error) {
+        request.log.error(
+          {
+            code: error.code,
+            message:
+              error.message,
+            details:
+              error.details,
+            hint: error.hint,
+          },
+          "Failed to create person"
+        );
+
+        if (
+          error.code ===
+          "23505"
+        ) {
+          return reply
+            .code(409)
+            .send({
+              error:
+                "PERSON_DOCUMENT_ALREADY_EXISTS",
+            });
         }
-      )
-      .order(
-        "created_at",
-        {
-          ascending: true,
-        }
-      );
 
-    if (addressesError) {
-      request.log.error(
-        {
-          code: addressesError.code,
-          details: addressesError.details,
-          hint: addressesError.hint,
-          message: addressesError.message,
-        },
-        "Failed to load person addresses"
-      );
+        if (
+          error.code ===
+          "23514"
+        ) {
+          return reply
+            .code(400)
+            .send({
+              error:
+                "PERSON_CONSTRAINT_VIOLATION",
+            });
+        }
+
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_CREATE_FAILED",
+          });
+      }
 
       return reply
-        .code(500)
-        .send({ error: "PERSON_ADDRESSES_READ_FAILED" });
+        .code(201)
+        .send({
+          data,
+        });
     }
+  );
 
-    // --------------------------------------------------------
-    // Relacionamentos
-    // --------------------------------------------------------
+  // ==========================================================
+  // PATCH /api/v1/persons/:id
+  // ==========================================================
 
-    const {
-      data: relationships,
-      error: relationshipsError,
-    } = await auth.supabase
-      .from("person_relationships")
-      .select(`
-        id,
-        related_person_id,
-        relationship_type,
-        is_legal_guardian,
-        is_financial_responsible,
-        starts_at,
-        ends_at,
-        notes,
-        created_at,
-        updated_at
-      `)
-      .eq(
-        "person_id",
-        id
-      )
-      .eq(
-        "organization_id",
-        organization.id
-      )
-      .is(
-        "deleted_at",
-        null
-      )
-      .order(
-        "created_at",
-        {
-          ascending: true,
+  app.patch(
+    "/api/v1/persons/:id",
+    async (request, reply) => {
+      const auth =
+        await requireAuthenticatedUser(
+          request
+        );
+
+      if (!auth.ok) {
+        return reply
+          .code(auth.statusCode)
+          .send({
+            error: auth.error,
+          });
+      }
+
+      const parsedParams =
+        paramsSchema.safeParse(
+          request.params
+        );
+
+      if (!parsedParams.success) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INVALID_PERSON_ID",
+            details:
+              parsedParams.error.flatten(),
+          });
+      }
+
+      const parsedBody =
+        updatePersonSchema.safeParse(
+          request.body
+        );
+
+      if (!parsedBody.success) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INVALID_PERSON_DATA",
+            details:
+              parsedBody.error.flatten(),
+          });
+      }
+
+      const {
+        data: contextData,
+        error: contextError,
+      } = await auth.supabase.rpc(
+        "current_user_context"
+      );
+
+      if (contextError) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "USER_CONTEXT_UNAVAILABLE",
+          });
+      }
+
+      const parsedContext =
+        contextSchema.safeParse(
+          contextData
+        );
+
+      if (!parsedContext.success) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "INVALID_USER_CONTEXT",
+          });
+      }
+
+      const {
+        organization,
+        permissions,
+      } = parsedContext.data;
+
+      if (
+        !permissions.includes(
+          "person.update"
+        )
+      ) {
+        return reply
+          .code(403)
+          .send({
+            error:
+              "PERMISSION_DENIED",
+          });
+      }
+
+      const { id } =
+        parsedParams.data;
+
+      const {
+        data: existingPerson,
+        error: existingError,
+      } = await auth.supabase
+        .from("persons")
+        .select(`
+          id,
+          person_type,
+          cpf,
+          cnpj
+        `)
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        )
+        .maybeSingle();
+
+      if (existingError) {
+        request.log.error(
+          {
+            code:
+              existingError.code,
+            details:
+              existingError.details,
+            hint:
+              existingError.hint,
+            message:
+              existingError.message,
+          },
+          "Failed to verify person before update"
+        );
+
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_READ_FAILED",
+          });
+      }
+
+      if (
+        !existingPerson
+      ) {
+        return reply
+          .code(404)
+          .send({
+            error:
+              "PERSON_NOT_FOUND",
+          });
+      }
+
+      const update =
+        parsedBody.data;
+
+      const resultingType =
+        update.person_type ??
+        existingPerson.person_type;
+
+      const resultingCpf =
+        update.cpf !==
+        undefined
+          ? update.cpf
+          : existingPerson.cpf;
+
+      const resultingCnpj =
+        update.cnpj !==
+        undefined
+          ? update.cnpj
+          : existingPerson.cnpj;
+
+      if (
+        resultingType ===
+          "INDIVIDUAL" &&
+        resultingCnpj
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "INDIVIDUAL_CANNOT_HAVE_CNPJ",
+          });
+      }
+
+      if (
+        resultingType ===
+          "ORGANIZATION" &&
+        resultingCpf
+      ) {
+        return reply
+          .code(400)
+          .send({
+            error:
+              "ORGANIZATION_CANNOT_HAVE_CPF",
+          });
+      }
+
+      const updatePayload = {
+        ...update,
+
+        updated_by:
+          auth.user.id,
+
+        updated_at:
+          new Date().toISOString(),
+      };
+
+      const {
+        data,
+        error,
+      } = await auth.supabase
+        .from("persons")
+        .update(
+          updatePayload
+        )
+        .eq(
+          "id",
+          id
+        )
+        .eq(
+          "organization_id",
+          organization.id
+        )
+        .is(
+          "deleted_at",
+          null
+        )
+        .select()
+        .single();
+
+      if (error) {
+        request.log.error(
+          {
+            code: error.code,
+            message:
+              error.message,
+            details:
+              error.details,
+            hint: error.hint,
+          },
+          "Failed to update person"
+        );
+
+        if (
+          error.code ===
+          "23505"
+        ) {
+          return reply
+            .code(409)
+            .send({
+              error:
+                "PERSON_DOCUMENT_ALREADY_EXISTS",
+            });
         }
-      );
 
-    if (relationshipsError) {
-      request.log.error(
-        {
-          code: relationshipsError.code,
-          details: relationshipsError.details,
-          hint: relationshipsError.hint,
-          message: relationshipsError.message,
-        },
-        "Failed to load person relationships"
-      );
+        if (
+          error.code ===
+          "23514"
+        ) {
+          return reply
+            .code(400)
+            .send({
+              error:
+                "PERSON_CONSTRAINT_VIOLATION",
+            });
+        }
 
-      return reply
-        .code(500)
-        .send({ error: "PERSON_RELATIONSHIPS_READ_FAILED" });
+        return reply
+          .code(500)
+          .send({
+            error:
+              "PERSON_UPDATE_FAILED",
+          });
+      }
+
+      return reply.send({
+        data,
+      });
     }
-
-    return reply.send({
-      person,
-      addresses: addresses ?? [],
-      relationships: relationships ?? [],
-    });
-  });
+  );
 }

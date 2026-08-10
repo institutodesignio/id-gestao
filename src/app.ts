@@ -23,16 +23,18 @@ export async function buildApp() {
         return callback(null, true);
       }
 
-      callback(
-        null,
-        config.corsOrigins.includes(origin)
-      );
+      const isAllowed =
+        config.corsOrigins.includes(origin);
+
+      callback(null, isAllowed);
     },
 
     credentials: false,
 
     methods: [
       "GET",
+      "POST",
+      "PATCH",
       "OPTIONS",
     ],
 
