@@ -50,7 +50,8 @@ export const createPersonRelationshipSchema = z
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         path: ["ends_at"],
-        message: "ends_at cannot be before starts_at",
+        message:
+          "ends_at cannot be before starts_at",
       });
     }
   });
@@ -90,8 +91,24 @@ export const updatePersonRelationshipSchema = z
   })
   .strict()
   .refine(
-    (data) => Object.keys(data).length > 0,
+    (data) =>
+      Object.keys(data).length > 0,
     {
-      message: "At least one field must be provided",
+      message:
+        "At least one field must be provided",
     }
-  );
+  )
+  .superRefine((data, ctx) => {
+    if (
+      data.starts_at &&
+      data.ends_at &&
+      data.ends_at < data.starts_at
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["ends_at"],
+        message:
+          "ends_at cannot be before starts_at",
+      });
+    }
+  });
