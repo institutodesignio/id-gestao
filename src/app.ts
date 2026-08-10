@@ -8,6 +8,8 @@ import { config } from "./config.js";
 import { healthRoutes } from "./routes/health.js";
 import { meRoutes } from "./routes/me.js";
 import { personsRoutes } from "./routes/persons.js";
+import { personAddressesRoutes } from "./routes/person-addresses.js";
+import { personRelationshipsRoutes } from "./routes/person-relationships.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -23,10 +25,12 @@ export async function buildApp() {
         return callback(null, true);
       }
 
-      const isAllowed =
-        config.corsOrigins.includes(origin);
-
-      callback(null, isAllowed);
+      callback(
+        null,
+        config.corsOrigins.includes(
+          origin
+        )
+      );
     },
 
     credentials: false,
@@ -44,9 +48,25 @@ export async function buildApp() {
     ],
   });
 
-  await app.register(healthRoutes);
-  await app.register(meRoutes);
-  await app.register(personsRoutes);
+  await app.register(
+    healthRoutes
+  );
+
+  await app.register(
+    meRoutes
+  );
+
+  await app.register(
+    personsRoutes
+  );
+
+  await app.register(
+    personAddressesRoutes
+  );
+
+  await app.register(
+    personRelationshipsRoutes
+  );
 
   return app;
 }
