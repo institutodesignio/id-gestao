@@ -12,6 +12,7 @@ import { personAddressesRoutes } from "./routes/person-addresses.js";
 import { personRelationshipsRoutes } from "./routes/person-relationships.js";
 import { unitsRoutes } from "./routes/units.js";
 import { projectsRoutes } from "./routes/projects.js";
+import { projectUnitsRoutes } from "./routes/project-units.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -29,7 +30,9 @@ export async function buildApp() {
 
       callback(
         null,
-        config.corsOrigins.includes(origin)
+        config.corsOrigins.includes(
+          origin
+        )
       );
     },
 
@@ -75,6 +78,10 @@ export async function buildApp() {
 
   await app.register(
     projectsRoutes
+  );
+
+  await app.register(
+    projectUnitsRoutes
   );
 
   return app;
