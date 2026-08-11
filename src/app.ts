@@ -11,6 +11,7 @@ import { personsRoutes } from "./routes/persons.js";
 import { personAddressesRoutes } from "./routes/person-addresses.js";
 import { personRelationshipsRoutes } from "./routes/person-relationships.js";
 import { unitsRoutes } from "./routes/units.js";
+import { projectsRoutes } from "./routes/projects.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -70,6 +71,10 @@ export async function buildApp() {
 
   await app.register(
     unitsRoutes
+  );
+
+  await app.register(
+    projectsRoutes
   );
 
   return app;
