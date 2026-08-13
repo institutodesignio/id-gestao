@@ -9,8 +9,22 @@ import {
 } from "../auth.js";
 
 import {
+  createMemberRoleSchema,
+  endMemberRoleSchema,
+} from "../schemas/member-roles.js";
+
+import {
   membersQuerySchema,
 } from "../schemas/members.js";
+
+const memberParamsSchema = z.object({
+  memberId: z.string().uuid(),
+});
+
+const memberRoleParamsSchema = z.object({
+  memberId: z.string().uuid(),
+  memberRoleId: z.string().uuid(),
+});
 
 const contextSchema =
   z.object({
@@ -555,6 +569,264 @@ export async function membersRoutes(
             null,
         },
       });
+    }
+  );
+
+  // ==========================================================
+  // GET /api/v1/members/:memberId
+  // ==========================================================
+
+  app.get(
+    "/api/v1/members/:memberId",
+    async (request, reply) => {
+      const auth = await requireAuthenticatedUser(request);
+
+      if (!auth.ok) {
+        return reply.code(auth.statusCode).send({ error: auth.error });
+      }
+
+      const parsedParams = memberParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: "INVALID_MEMBER_ID" });
+      }
+
+      const contextResult = await loadContext(auth, reply);
+      if (!contextResult.ok) return contextResult.response;
+
+      const { organization, permissions } = contextResult.context;
+      if (!permissions.includes("user.read")) {
+        return reply.code(403).send({ error: "PERMISSION_DENIED" });
+      }
+
+      const { data, error } = await auth.supabase
+        .from("organization_members")
+        .select(`
+          id, person_id, user_profile_id, status, joined_at, ended_at, created_at,
+          person:persons (id, full_name, preferred_name, primary_email),
+          user_profile:user_profiles (id, auth_user_id, email),
+          member_roles (
+            id, role_id, starts_at, ends_at,
+            role:roles (id, code, name, description)
+          )
+        `)
+        .eq("id", parsedParams.data.memberId)
+        .eq("organization_id", organization.id)
+        .maybeSingle();
+
+      if (error) {
+        request.log.error({ code: error.code, message: error.message }, "Failed to read member");
+        return reply.code(500).send({ error: "MEMBER_READ_FAILED" });
+      }
+
+      if (!data) return reply.code(404).send({ error: "MEMBER_NOT_FOUND" });
+
+      const person = singleRelation(data.person);
+      const userProfile = singleRelation(data.user_profile);
+      const roles = (data.member_roles ?? []).map((assignment: any) => {
+        const role = singleRelation(assignment.role);
+        return {
+          id: assignment.id,
+          role_id: assignment.role_id,
+          role_code: role?.code ?? null,
+          role_name: role?.name ?? null,
+          role_description: role?.description ?? null,
+          starts_at: assignment.starts_at,
+          ends_at: assignment.ends_at,
+        };
+      });
+
+      return reply.send({
+        id: data.id,
+        person_id: data.person_id,
+        user_profile_id: data.user_profile_id,
+        user_id: userProfile?.auth_user_id ?? null,
+        status: data.status,
+        joined_at: data.joined_at,
+        ended_at: data.ended_at,
+        created_at: data.created_at,
+        profile: {
+          full_name: person?.full_name ?? person?.preferred_name ?? null,
+          preferred_name: person?.preferred_name ?? null,
+          email: userProfile?.email ?? person?.primary_email ?? null,
+          avatar_url: null,
+        },
+        roles,
+      });
+    }
+  );
+
+  // ==========================================================
+  // POST /api/v1/members/:memberId/roles
+  // ==========================================================
+
+  app.post(
+    "/api/v1/members/:memberId/roles",
+    async (request, reply) => {
+      const auth = await requireAuthenticatedUser(request);
+      if (!auth.ok) return reply.code(auth.statusCode).send({ error: auth.error });
+
+      const parsedParams = memberParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) return reply.code(400).send({ error: "INVALID_MEMBER_ID" });
+
+      const parsedBody = createMemberRoleSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send({
+          error: "INVALID_MEMBER_ROLE_DATA",
+          details: parsedBody.error.flatten(),
+        });
+      }
+
+      const contextResult = await loadContext(auth, reply);
+      if (!contextResult.ok) return contextResult.response;
+      const { organization, permissions } = contextResult.context;
+      if (!permissions.includes("user.manage_roles")) {
+        return reply.code(403).send({ error: "PERMISSION_DENIED" });
+      }
+
+      const { data: member, error: memberError } = await auth.supabase
+        .from("organization_members")
+        .select("id")
+        .eq("id", parsedParams.data.memberId)
+        .eq("organization_id", organization.id)
+        .maybeSingle();
+
+      if (memberError) return reply.code(500).send({ error: "MEMBER_READ_FAILED" });
+      if (!member) return reply.code(404).send({ error: "MEMBER_NOT_FOUND" });
+
+      const { data: role, error: roleError } = await auth.supabase
+        .from("roles")
+        .select("id, code, name, description")
+        .eq("id", parsedBody.data.role_id)
+        .eq("status", "ACTIVE")
+        .is("deleted_at", null)
+        .or(`organization_id.eq.${organization.id},organization_id.is.null`)
+        .maybeSingle();
+
+      if (roleError) return reply.code(500).send({ error: "ROLE_READ_FAILED" });
+      if (!role) return reply.code(404).send({ error: "ROLE_NOT_FOUND" });
+      if (
+        role.code === "ADMINISTRATOR" &&
+        !permissions.includes("role.manage")
+      ) {
+        return reply.code(403).send({ error: "ROLE_ASSIGNMENT_FORBIDDEN" });
+      }
+
+      const insertPayload: Record<string, unknown> = {
+        organization_member_id: member.id,
+        role_id: role.id,
+        ends_at: parsedBody.data.ends_at ?? null,
+        created_by: auth.user.id,
+        updated_by: auth.user.id,
+      };
+      if (parsedBody.data.starts_at) insertPayload.starts_at = parsedBody.data.starts_at;
+
+      const { data: assignment, error: insertError } = await auth.supabase
+        .from("member_roles")
+        .insert(insertPayload)
+        .select("id, organization_member_id, role_id, starts_at, ends_at, created_at")
+        .single();
+
+      if (insertError?.code === "23505") {
+        return reply.code(409).send({ error: "MEMBER_ROLE_ALREADY_ACTIVE" });
+      }
+      if (insertError) return reply.code(500).send({ error: "MEMBER_ROLE_CREATE_FAILED" });
+
+      return reply.code(201).send({ ...assignment, role });
+    }
+  );
+
+  // ==========================================================
+  // PATCH /api/v1/members/:memberId/roles/:memberRoleId/end
+  // ==========================================================
+
+  app.patch(
+    "/api/v1/members/:memberId/roles/:memberRoleId/end",
+    async (request, reply) => {
+      const auth = await requireAuthenticatedUser(request);
+      if (!auth.ok) return reply.code(auth.statusCode).send({ error: auth.error });
+
+      const parsedParams = memberRoleParamsSchema.safeParse(request.params);
+      if (!parsedParams.success) return reply.code(400).send({ error: "INVALID_MEMBER_ROLE_ID" });
+
+      const parsedBody = endMemberRoleSchema.safeParse(request.body);
+      if (!parsedBody.success) {
+        return reply.code(400).send({
+          error: "INVALID_MEMBER_ROLE_DATA",
+          details: parsedBody.error.flatten(),
+        });
+      }
+
+      const contextResult = await loadContext(auth, reply);
+      if (!contextResult.ok) return contextResult.response;
+      const { organization, permissions } = contextResult.context;
+      if (!permissions.includes("user.manage_roles")) {
+        return reply.code(403).send({ error: "PERMISSION_DENIED" });
+      }
+
+      const { data: member, error: memberError } = await auth.supabase
+        .from("organization_members")
+        .select("id")
+        .eq("id", parsedParams.data.memberId)
+        .eq("organization_id", organization.id)
+        .maybeSingle();
+
+      if (memberError) return reply.code(500).send({ error: "MEMBER_READ_FAILED" });
+      if (!member) return reply.code(404).send({ error: "MEMBER_NOT_FOUND" });
+
+      const { data: assignment, error: assignmentError } = await auth.supabase
+        .from("member_roles")
+        .select("id, role_id, starts_at, role:roles(code)")
+        .eq("id", parsedParams.data.memberRoleId)
+        .eq("organization_member_id", member.id)
+        .is("ends_at", null)
+        .maybeSingle();
+
+      if (assignmentError) return reply.code(500).send({ error: "MEMBER_ROLE_READ_FAILED" });
+      if (!assignment) return reply.code(404).send({ error: "ACTIVE_MEMBER_ROLE_NOT_FOUND" });
+      if (parsedBody.data.ends_at < assignment.starts_at) {
+        return reply.code(409).send({ error: "MEMBER_ROLE_END_BEFORE_START" });
+      }
+
+      const assignmentRole = singleRelation(assignment.role);
+      if (assignmentRole?.code === "ADMINISTRATOR") {
+        if (!permissions.includes("role.manage")) {
+          return reply.code(403).send({ error: "ROLE_ASSIGNMENT_FORBIDDEN" });
+        }
+
+        const { count, error: countError } = await auth.supabase
+          .from("member_roles")
+          .select("id, organization_member:organization_members!inner(organization_id)", {
+            count: "exact",
+            head: true,
+          })
+          .eq("role_id", assignment.role_id)
+          .is("ends_at", null)
+          .eq("organization_member.organization_id", organization.id)
+          .neq("organization_member_id", member.id);
+
+        if (countError) {
+          return reply.code(500).send({ error: "ADMINISTRATOR_COUNT_FAILED" });
+        }
+        if ((count ?? 0) === 0) {
+          return reply.code(409).send({ error: "LAST_ADMINISTRATOR_ROLE_REQUIRED" });
+        }
+      }
+
+      const { data: updated, error: updateError } = await auth.supabase
+        .from("member_roles")
+        .update({
+          ends_at: parsedBody.data.ends_at,
+          updated_at: new Date().toISOString(),
+          updated_by: auth.user.id,
+        })
+        .eq("id", assignment.id)
+        .eq("organization_member_id", member.id)
+        .is("ends_at", null)
+        .select("id, organization_member_id, role_id, starts_at, ends_at, updated_at")
+        .single();
+
+      if (updateError) return reply.code(500).send({ error: "MEMBER_ROLE_END_FAILED" });
+      return reply.send(updated);
     }
   );
 }
