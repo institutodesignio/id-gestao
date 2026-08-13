@@ -93,6 +93,24 @@ POST `/api/v1/persons/:id/relationships`
 
 PATCH `/api/v1/persons/:id/relationships/:relationshipId`
 
+### Membros e perfis institucionais
+
+GET `/api/v1/members`
+
+GET `/api/v1/members/:memberId`
+
+POST `/api/v1/members/:memberId/roles`
+
+PATCH `/api/v1/members/:memberId/roles/:memberRoleId/end`
+
+A leitura exige `user.read`. A atribuição e o encerramento de roles exigem
+`user.manage_roles`. Operações sobre a role `ADMINISTRATOR` exigem também
+`role.manage`, e o último administrador ativo da organização não pode ter sua
+atribuição encerrada.
+
+O identificador da organização não faz parte dos payloads dessas operações. O
+backend deriva e valida a organização a partir do contexto autenticado.
+
 Este documento não substitui os schemas e a implementação existentes no código.
 
 ---
@@ -110,5 +128,15 @@ Exemplos:
 `PERSON_RELATIONSHIP_SELF_REFERENCE`
 
 `RELATIONSHIP_PERSON_NOT_FOUND`
+
+`MEMBER_NOT_FOUND`
+
+`ROLE_NOT_FOUND`
+
+`MEMBER_ROLE_ALREADY_ACTIVE`
+
+`ROLE_ASSIGNMENT_FORBIDDEN`
+
+`LAST_ADMINISTRATOR_ROLE_REQUIRED`
 
 Os detalhes internos do banco ou infraestrutura não devem ser expostos desnecessariamente aos clientes da API.
