@@ -14,6 +14,9 @@ import { unitsRoutes } from "./routes/units.js";
 import { projectsRoutes } from "./routes/projects.js";
 import { projectUnitsRoutes } from "./routes/project-units.js";
 import { membersRoutes } from "./routes/members.js";
+import { organizationsRoutes } from "./routes/organizations.js";
+import { projectTeamRoutes } from "./routes/project-team.js";
+import { clinicalSupervisionRoutes } from "./routes/clinical-supervision.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -81,6 +84,10 @@ export async function buildApp() {
   );
 
   await app.register(
+    organizationsRoutes
+  );
+
+  await app.register(
     projectsRoutes
   );
 
@@ -91,6 +98,9 @@ export async function buildApp() {
   await app.register(
     membersRoutes
   );
+
+  await app.register(projectTeamRoutes);
+  await app.register(clinicalSupervisionRoutes);
 
   return app;
 }

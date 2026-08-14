@@ -539,62 +539,6 @@ export async function unitsRoutes(
       const payload =
         parsedBody.data;
 
-      if (
-        payload.is_headquarters ===
-        true
-      ) {
-        const {
-          error:
-            clearHeadquartersError,
-        } = await auth.supabase
-          .from("units")
-          .update({
-            is_headquarters:
-              false,
-            updated_by:
-              auth.user.id,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .eq(
-            "is_headquarters",
-            true
-          )
-          .is(
-            "deleted_at",
-            null
-          );
-
-        if (
-          clearHeadquartersError
-        ) {
-          request.log.error(
-            {
-              code:
-                clearHeadquartersError.code,
-              details:
-                clearHeadquartersError.details,
-              hint:
-                clearHeadquartersError.hint,
-              message:
-                clearHeadquartersError.message,
-            },
-            "Failed to reset headquarters before creating unit"
-          );
-
-          return reply
-            .code(500)
-            .send({
-              error:
-                "UNIT_HEADQUARTERS_RESET_FAILED",
-            });
-        }
-      }
-
       const {
         data,
         error,
@@ -860,66 +804,6 @@ export async function unitsRoutes(
 
       const update =
         parsedBody.data;
-
-      if (
-        update.is_headquarters ===
-        true
-      ) {
-        const {
-          error:
-            clearHeadquartersError,
-        } = await auth.supabase
-          .from("units")
-          .update({
-            is_headquarters:
-              false,
-            updated_by:
-              auth.user.id,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .neq(
-            "id",
-            id
-          )
-          .eq(
-            "is_headquarters",
-            true
-          )
-          .is(
-            "deleted_at",
-            null
-          );
-
-        if (
-          clearHeadquartersError
-        ) {
-          request.log.error(
-            {
-              code:
-                clearHeadquartersError.code,
-              details:
-                clearHeadquartersError.details,
-              hint:
-                clearHeadquartersError.hint,
-              message:
-                clearHeadquartersError.message,
-            },
-            "Failed to reset headquarters before updating unit"
-          );
-
-          return reply
-            .code(500)
-            .send({
-              error:
-                "UNIT_HEADQUARTERS_RESET_FAILED",
-            });
-        }
-      }
 
       const {
         data,

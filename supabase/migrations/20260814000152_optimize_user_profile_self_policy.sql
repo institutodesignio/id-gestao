@@ -1,0 +1,1 @@
+-- Historical checkpoint consolidated into the two baseline migrations above.

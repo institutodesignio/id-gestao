@@ -150,35 +150,6 @@ export async function personAddressesRoutes(
       const payload =
         parsedBody.data;
 
-      if (payload.is_primary) {
-        const {
-          error: clearPrimaryError,
-        } = await auth.supabase
-          .from("person_addresses")
-          .update({
-            is_primary: false,
-            updated_by: auth.user.id,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("person_id", id)
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .eq("is_primary", true)
-          .is("deleted_at", null);
-
-        if (clearPrimaryError) {
-          return reply
-            .code(500)
-            .send({
-              error:
-                "PRIMARY_ADDRESS_RESET_FAILED",
-            });
-        }
-      }
-
       const {
         data,
         error,
@@ -387,36 +358,6 @@ export async function personAddressesRoutes(
 
       const update =
         parsedBody.data;
-
-      if (update.is_primary === true) {
-        const {
-          error: clearPrimaryError,
-        } = await auth.supabase
-          .from("person_addresses")
-          .update({
-            is_primary: false,
-            updated_by: auth.user.id,
-            updated_at:
-              new Date().toISOString(),
-          })
-          .eq("person_id", id)
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .neq("id", addressId)
-          .eq("is_primary", true)
-          .is("deleted_at", null);
-
-        if (clearPrimaryError) {
-          return reply
-            .code(500)
-            .send({
-              error:
-                "PRIMARY_ADDRESS_RESET_FAILED",
-            });
-        }
-      }
 
       const {
         data,

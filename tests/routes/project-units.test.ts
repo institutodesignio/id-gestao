@@ -116,6 +116,63 @@ describe(
     });
 
     // ========================================================
+    // GET
+    // ========================================================
+
+    it(
+      "returns 401 when listing project units without authentication",
+      async () => {
+        requireAuthenticatedUserMock.mockResolvedValue(unauthenticated());
+        const app = await buildTestApp();
+
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/v1/projects/${projectId}/units`,
+        });
+
+        expect(response.statusCode).toBe(401);
+        expect(response.json()).toEqual({ error: "AUTHENTICATION_REQUIRED" });
+        await app.close();
+      }
+    );
+
+    it(
+      "returns 400 for invalid project id when listing project units",
+      async () => {
+        requireAuthenticatedUserMock.mockResolvedValue(
+          authenticated(["project.read"])
+        );
+        const app = await buildTestApp();
+
+        const response = await app.inject({
+          method: "GET",
+          url: "/api/v1/projects/not-a-uuid/units",
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json().error).toBe("INVALID_PROJECT_ID");
+        await app.close();
+      }
+    );
+
+    it(
+      "returns 403 when listing project units without project.read",
+      async () => {
+        requireAuthenticatedUserMock.mockResolvedValue(authenticated([]));
+        const app = await buildTestApp();
+
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/v1/projects/${projectId}/units`,
+        });
+
+        expect(response.statusCode).toBe(403);
+        expect(response.json().error).toBe("PERMISSION_DENIED");
+        await app.close();
+      }
+    );
+
+    // ========================================================
     // POST
     // ========================================================
 

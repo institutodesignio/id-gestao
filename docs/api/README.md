@@ -115,6 +115,110 @@ Este documento não substitui os schemas e a implementação existentes no códi
 
 ---
 
+## Organização e unidades
+
+GET `/api/v1/organization`
+
+PATCH `/api/v1/organization`
+
+GET `/api/v1/units`
+
+GET `/api/v1/units/:id`
+
+POST `/api/v1/units`
+
+PATCH `/api/v1/units/:id`
+
+DELETE `/api/v1/units/:id`
+
+A organização é sempre derivada do contexto autenticado. O slug institucional não
+pode ser alterado pela API. Atualizações exigem `organization.update`; leitura exige
+`organization.read`.
+
+Unidades exigem as permissões `unit.read`, `unit.create`, `unit.update` e
+`unit.delete`, conforme a operação. A troca de sede é atômica no banco: ao marcar
+uma unidade como sede, a sede anterior é desmarcada na mesma transação. A sede não
+pode ser excluída logicamente.
+
+---
+
+## Projetos e unidades de execução
+
+GET `/api/v1/projects`
+
+GET `/api/v1/projects/:id`
+
+POST `/api/v1/projects`
+
+PATCH `/api/v1/projects/:id`
+
+DELETE `/api/v1/projects/:id`
+
+GET `/api/v1/projects/:projectId/units`
+
+POST `/api/v1/projects/:projectId/units`
+
+PATCH `/api/v1/projects/:projectId/units/:projectUnitId`
+
+DELETE `/api/v1/projects/:projectId/units/:projectUnitId`
+
+As operações respeitam simultaneamente a organização autenticada, as permissões
+`project.*` e os escopos de projeto e unidade. A unidade principal de um projeto é
+substituída atomicamente no banco. Datas parciais de atualização são validadas
+contra as datas já persistidas, impedindo intervalos invertidos.
+
+---
+
+## Cadastro institucional de pessoas
+
+O cadastro diferencia pessoa física (`INDIVIDUAL`) e pessoa jurídica
+(`ORGANIZATION`) e impede combinações incompatíveis de CPF e CNPJ. Documentos são
+normalizados antes da persistência e permanecem únicos dentro da organização.
+
+O endereço principal é substituído atomicamente no banco. Relacionamentos não
+aceitam autorreferência, só podem apontar para pessoas ativas da mesma organização
+e validam o intervalo completo mesmo quando apenas uma das datas é alterada.
+
+---
+
+## Equipe de projetos
+
+GET `/api/v1/projects/:projectId/team`
+
+POST `/api/v1/projects/:projectId/team`
+
+PATCH `/api/v1/projects/:projectId/team/:memberId`
+
+DELETE `/api/v1/projects/:projectId/team/:memberId`
+
+A leitura exige `project.read`; alterações exigem `project.manage_team`. Pessoa,
+projeto e organização são conferidos no banco, impedindo vínculos entre entidades
+de organizações diferentes. O encerramento preserva o histórico por exclusão lógica.
+
+---
+
+## Central de Supervisão Clínica
+
+GET `/api/v1/clinical-supervision/cases`
+
+POST `/api/v1/clinical-supervision/cases`
+
+PATCH `/api/v1/clinical-supervision/cases/:id`
+
+GET `/api/v1/clinical-supervision/cases/:id/sessions`
+
+POST `/api/v1/clinical-supervision/cases/:id/sessions`
+
+PATCH `/api/v1/clinical-supervision/cases/:id/sessions/:sessionId`
+
+A central só aceita projetos marcados com atendimento clínico. Casos vinculam
+beneficiário, projeto e, opcionalmente, Responsável Técnico. Sessões registram
+supervisor, agenda, estado e notas. Leitura exige `clinical_supervision.read` e
+alterações exigem `clinical_supervision.manage`, sempre combinadas ao escopo do
+projeto. Responsável Técnico possui leitura e gestão transversal autorizada.
+
+---
+
 ## Erros
 
 As APIs devem preferir códigos de erro estáveis e semanticamente identificáveis.

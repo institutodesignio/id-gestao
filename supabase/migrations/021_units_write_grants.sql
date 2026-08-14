@@ -1,7 +1,1 @@
-begin;
-
-grant insert, update
-on table public.units
-to authenticated;
-
-commit;
+-- Historical migration consolidated into 014-016 baseline files.

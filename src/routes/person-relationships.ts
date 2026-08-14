@@ -367,7 +367,9 @@ export async function personRelationshipsRoutes(
         )
         .select(`
           id,
-          related_person_id
+          related_person_id,
+          starts_at,
+          ends_at
         `)
         .eq(
           "id",
@@ -409,6 +411,25 @@ export async function personRelationshipsRoutes(
 
       const update =
         parsedBody.data;
+
+      const startsAt = update.starts_at !== undefined
+        ? update.starts_at
+        : existingRelationship.starts_at;
+      const endsAt = update.ends_at !== undefined
+        ? update.ends_at
+        : existingRelationship.ends_at;
+
+      if (startsAt && endsAt && endsAt < startsAt) {
+        return reply.code(400).send({
+          error: "INVALID_RELATIONSHIP_DATA",
+          details: {
+            formErrors: [],
+            fieldErrors: {
+              ends_at: ["ends_at cannot be before starts_at"],
+            },
+          },
+        });
+      }
 
       const resultingRelatedPersonId =
         update.related_person_id ??

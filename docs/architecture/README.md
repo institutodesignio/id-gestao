@@ -93,3 +93,13 @@ Esses conceitos não devem ser misturados automaticamente com `person_relationsh
 Novas decisões arquiteturais relevantes devem ser documentadas neste diretório.
 
 Quando uma decisão substituir outra, registrar a mudança em vez de simplesmente apagar o contexto histórico quando esse histórico for relevante para manutenção.
+
+---
+
+## Registros principais
+
+Regras de unicidade que exigem substituir um registro principal, como unidade
+principal de projeto e endereço principal de pessoa, pertencem ao banco de dados.
+A troca deve ocorrer na mesma transação do `INSERT` ou `UPDATE` solicitado. O
+backend não deve desmarcar o registro anterior em uma operação separada, pois uma
+falha posterior criaria estado intermediário inconsistente.
