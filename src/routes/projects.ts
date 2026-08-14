@@ -705,7 +705,7 @@ export async function projectsRoutes(
         error: existingError,
       } = await auth.supabase
         .from("projects")
-        .select("id")
+        .select("id, starts_at, ends_at")
         .eq(
           "id",
           id
@@ -736,6 +736,25 @@ export async function projectsRoutes(
             error:
               "PROJECT_NOT_FOUND",
           });
+      }
+
+      const startsAt = parsedBody.data.starts_at !== undefined
+        ? parsedBody.data.starts_at
+        : existingProject.starts_at;
+      const endsAt = parsedBody.data.ends_at !== undefined
+        ? parsedBody.data.ends_at
+        : existingProject.ends_at;
+
+      if (startsAt && endsAt && endsAt < startsAt) {
+        return reply.code(400).send({
+          error: "INVALID_PROJECT_DATA",
+          details: {
+            formErrors: [],
+            fieldErrors: {
+              ends_at: ["ends_at cannot be before starts_at"],
+            },
+          },
+        });
       }
 
       const {

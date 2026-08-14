@@ -76,6 +76,86 @@ export async function projectUnitsRoutes(
   app: FastifyInstance
 ) {
   // ==========================================================
+  // GET /api/v1/projects/:projectId/units
+  // ==========================================================
+
+  app.get(
+    "/api/v1/projects/:projectId/units",
+    async (request, reply) => {
+      const auth = await requireAuthenticatedUser(request);
+
+      if (!auth.ok) {
+        return reply.code(auth.statusCode).send({ error: auth.error });
+      }
+
+      const parsedParams = projectParamsSchema.safeParse(request.params);
+
+      if (!parsedParams.success) {
+        return reply.code(400).send({ error: "INVALID_PROJECT_ID" });
+      }
+
+      const contextResult = await loadContext(auth, reply);
+
+      if (!contextResult.ok) {
+        return contextResult.response;
+      }
+
+      const { organization, permissions } = contextResult.context;
+
+      if (!permissions.includes("project.read")) {
+        return reply.code(403).send({ error: "PERMISSION_DENIED" });
+      }
+
+      const { projectId } = parsedParams.data;
+      const { data: project, error: projectError } = await auth.supabase
+        .from("projects")
+        .select("id")
+        .eq("id", projectId)
+        .eq("organization_id", organization.id)
+        .is("deleted_at", null)
+        .maybeSingle();
+
+      if (projectError) {
+        return reply.code(500).send({ error: "PROJECT_READ_FAILED" });
+      }
+
+      if (!project) {
+        return reply.code(404).send({ error: "PROJECT_NOT_FOUND" });
+      }
+
+      const { data, error } = await auth.supabase
+        .from("project_units")
+        .select(`
+          id,
+          project_id,
+          unit_id,
+          starts_at,
+          ends_at,
+          is_primary,
+          created_at,
+          updated_at,
+          unit:units!project_units_unit_fk (
+            id,
+            name,
+            slug,
+            status,
+            is_headquarters
+          )
+        `)
+        .eq("organization_id", organization.id)
+        .eq("project_id", projectId)
+        .order("is_primary", { ascending: false })
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        return reply.code(500).send({ error: "PROJECT_UNITS_LIST_FAILED" });
+      }
+
+      return reply.send({ data: data ?? [] });
+    }
+  );
+
+  // ==========================================================
   // POST /api/v1/projects/:projectId/units
   // ==========================================================
 
@@ -237,48 +317,6 @@ export async function projectUnitsRoutes(
             error:
               "UNIT_NOT_FOUND",
           });
-      }
-
-      if (
-        payload.is_primary ===
-        true
-      ) {
-        const {
-          error:
-            resetPrimaryError,
-        } = await auth.supabase
-          .from("project_units")
-          .update({
-            is_primary:
-              false,
-            updated_at:
-              new Date().toISOString(),
-            updated_by:
-              auth.user.id,
-          })
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .eq(
-            "project_id",
-            projectId
-          )
-          .eq(
-            "is_primary",
-            true
-          );
-
-        if (
-          resetPrimaryError
-        ) {
-          return reply
-            .code(500)
-            .send({
-              error:
-                "PROJECT_PRIMARY_UNIT_RESET_FAILED",
-            });
-        }
       }
 
       const {
@@ -472,52 +510,6 @@ export async function projectUnitsRoutes(
             error:
               "PROJECT_UNIT_NOT_FOUND",
           });
-      }
-
-      if (
-        parsedBody.data
-          .is_primary === true
-      ) {
-        const {
-          error:
-            resetPrimaryError,
-        } = await auth.supabase
-          .from("project_units")
-          .update({
-            is_primary:
-              false,
-            updated_at:
-              new Date().toISOString(),
-            updated_by:
-              auth.user.id,
-          })
-          .eq(
-            "organization_id",
-            organization.id
-          )
-          .eq(
-            "project_id",
-            projectId
-          )
-          .neq(
-            "id",
-            projectUnitId
-          )
-          .eq(
-            "is_primary",
-            true
-          );
-
-        if (
-          resetPrimaryError
-        ) {
-          return reply
-            .code(500)
-            .send({
-              error:
-                "PROJECT_PRIMARY_UNIT_RESET_FAILED",
-            });
-        }
       }
 
       const startsAt =

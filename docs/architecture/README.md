@@ -93,3 +93,32 @@ Esses conceitos não devem ser misturados automaticamente com `person_relationsh
 Novas decisões arquiteturais relevantes devem ser documentadas neste diretório.
 
 Quando uma decisão substituir outra, registrar a mudança em vez de simplesmente apagar o contexto histórico quando esse histórico for relevante para manutenção.
+
+---
+
+## Registros principais
+
+Regras de unicidade que exigem substituir um registro principal, como unidade
+principal de projeto e endereço principal de pessoa, pertencem ao banco de dados.
+A troca deve ocorrer na mesma transação do `INSERT` ou `UPDATE` solicitado. O
+backend não deve desmarcar o registro anterior em uma operação separada, pois uma
+falha posterior criaria estado intermediário inconsistente.
+
+---
+
+## Dados sensíveis e cadastro neurodivergente
+
+Dados gerais permanecem em `persons`. Perfil neurodivergente, atendimentos,
+necessidades e acessibilidade são dados sensíveis e utilizam estruturas próprias.
+Essa separação reduz exposição acidental, permite permissões específicas e impede
+que todo usuário com acesso ao cadastro básico veja informações de saúde.
+
+O envio do formulário é transacional. Consentimento é versionado e revogável; não
+é substituído silenciosamente. Responsáveis são pessoas independentes ligadas pelo
+modelo de relacionamentos existente.
+
+Indicadores não consultam ou exportam registros identificados. Resultados com menos
+de cinco integrantes são suprimidos para reduzir risco de reidentificação.
+
+Decisões de retenção não eliminam dados automaticamente. Exclusão, anonimização e
+restrições legais precisam de autorização, registro e processo auditável.

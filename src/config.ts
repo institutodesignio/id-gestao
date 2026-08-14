@@ -20,6 +20,10 @@ const schema = z.object({
     .string()
     .min(1),
 
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1).optional(),
+
+  APP_PUBLIC_URL: z.string().url().optional(),
+
   CORS_ORIGINS: z
     .string()
     .default("http://localhost:5173"),
@@ -32,6 +36,8 @@ export const config = {
   PORT: parsed.PORT,
   SUPABASE_URL: parsed.SUPABASE_URL,
   SUPABASE_ANON_KEY: parsed.SUPABASE_ANON_KEY,
+  SUPABASE_SERVICE_ROLE_KEY: parsed.SUPABASE_SERVICE_ROLE_KEY,
+  APP_PUBLIC_URL: parsed.APP_PUBLIC_URL,
 
   corsOrigins: parsed.CORS_ORIGINS
     .split(",")
