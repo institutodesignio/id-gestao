@@ -1,5 +1,6 @@
 import Fastify from "fastify";import{beforeEach,describe,expect,it,vi}from"vitest";
 vi.mock("../../src/auth.js",()=>({requireAuthenticatedUser:vi.fn()}));
+vi.mock("../../src/plugins/supabase.js",()=>({createAdminSupabaseClient:vi.fn(()=>null)}));
 import{requireAuthenticatedUser}from"../../src/auth.js";import{neurodivergentIntakeRoutes}from"../../src/routes/neurodivergent-intakes.js";import{carePrivacyRoutes}from"../../src/routes/care-privacy.js";
 const auth=vi.mocked(requireAuthenticatedUser);const id="11111111-1111-4111-8111-111111111111";
 async function build(){const app=Fastify({logger:false});await app.register(neurodivergentIntakeRoutes);await app.register(carePrivacyRoutes);return app;}
