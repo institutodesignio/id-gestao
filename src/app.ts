@@ -17,6 +17,8 @@ import { membersRoutes } from "./routes/members.js";
 import { organizationsRoutes } from "./routes/organizations.js";
 import { projectTeamRoutes } from "./routes/project-team.js";
 import { clinicalSupervisionRoutes } from "./routes/clinical-supervision.js";
+import { neurodivergentIntakeRoutes } from "./routes/neurodivergent-intakes.js";
+import { carePrivacyRoutes } from "./routes/care-privacy.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -101,6 +103,8 @@ export async function buildApp() {
 
   await app.register(projectTeamRoutes);
   await app.register(clinicalSupervisionRoutes);
+  await app.register(neurodivergentIntakeRoutes);
+  await app.register(carePrivacyRoutes);
 
   return app;
 }

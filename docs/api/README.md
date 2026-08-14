@@ -219,6 +219,62 @@ projeto. Responsável Técnico possui leitura e gestão transversal autorizada.
 
 ---
 
+## Cadastro da população neurodivergente
+
+GET `/api/v1/neurodivergent-intakes`
+
+GET `/api/v1/neurodivergent-intakes/:id`
+
+POST `/api/v1/neurodivergent-intakes/submit`
+
+PATCH `/api/v1/neurodivergent-intakes/:id/consents/:consentId/revoke`
+
+O envio final grava cadastro, perfil sensível, consentimento e revisão de retenção
+na mesma transação. Uma falha em qualquer etapa desfaz toda a operação. O protocolo
+é produzido pelo banco. A API não recebe `organization_id` do navegador.
+
+Permissões: `neurodivergent_profile.read`, `neurodivergent_profile.manage`,
+`consent.read` e `consent.manage`.
+
+## Demandas e encaminhamentos
+
+GET `/api/v1/care-requests`
+
+POST `/api/v1/care-requests`
+
+PATCH `/api/v1/care-requests/:id`
+
+As demandas representam necessidades identificadas, espera, encaminhamento,
+atendimento e conclusão. A fila não é inferida apenas do texto do formulário: ela
+possui estado, prioridade e data de espera próprios.
+
+## Indicadores protegidos
+
+GET `/api/v1/indicators/neurodivergent-population?dimension=condition`
+
+GET `/api/v1/indicators/neurodivergent-population?dimension=priority_need`
+
+Somente grupos com pelo menos cinco registros são retornados. O endpoint não
+retorna identificadores nem linhas individuais.
+
+## Privacidade e retenção
+
+GET `/api/v1/privacy/requests`
+
+POST `/api/v1/privacy/requests`
+
+PATCH `/api/v1/privacy/requests/:id`
+
+GET `/api/v1/privacy/retention-reviews`
+
+PATCH `/api/v1/privacy/retention-reviews/:id`
+
+Cada consentimento ativo agenda automaticamente uma revisão para 24 meses após a
+confirmação. Decisões de anonimizar ou excluir são registradas, mas a execução
+destrutiva exige processo operacional próprio e não ocorre automaticamente.
+
+---
+
 ## Erros
 
 As APIs devem preferir códigos de erro estáveis e semanticamente identificáveis.
