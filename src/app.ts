@@ -21,6 +21,9 @@ import { neurodivergentIntakeRoutes } from "./routes/neurodivergent-intakes.js";
 import { carePrivacyRoutes } from "./routes/care-privacy.js";
 import { auditRoutes } from "./routes/audit.js";
 import { invitationRoutes } from "./routes/invitations.js";
+import { agendaRoutes } from "./routes/agenda.js";
+import { documentRoutes } from "./routes/documents.js";
+import { financeRoutes } from "./routes/finance.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -33,82 +36,38 @@ export async function buildApp() {
   await app.register(cors, {
     origin(origin, callback) {
       if (!origin) {
-        return callback(
-          null,
-          true
-        );
+        return callback(null, true);
       }
 
-      callback(
-        null,
-        config.corsOrigins.includes(
-          origin
-        )
-      );
+      callback(null, config.corsOrigins.includes(origin));
     },
 
     credentials: false,
 
-    methods: [
-      "GET",
-      "POST",
-      "PATCH",
-      "DELETE",
-      "OPTIONS",
-    ],
+    methods: ["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
 
-    allowedHeaders: [
-      "Authorization",
-      "Content-Type",
-    ],
+    allowedHeaders: ["Authorization", "Content-Type"],
   });
 
-  await app.register(
-    healthRoutes
-  );
-
-  await app.register(
-    meRoutes
-  );
-
-  await app.register(
-    personsRoutes
-  );
-
-  await app.register(
-    personAddressesRoutes
-  );
-
-  await app.register(
-    personRelationshipsRoutes
-  );
-
-  await app.register(
-    unitsRoutes
-  );
-
-  await app.register(
-    organizationsRoutes
-  );
-
-  await app.register(
-    projectsRoutes
-  );
-
-  await app.register(
-    projectUnitsRoutes
-  );
-
-  await app.register(
-    membersRoutes
-  );
-
+  await app.register(healthRoutes);
+  await app.register(meRoutes);
+  await app.register(personsRoutes);
+  await app.register(personAddressesRoutes);
+  await app.register(personRelationshipsRoutes);
+  await app.register(unitsRoutes);
+  await app.register(organizationsRoutes);
+  await app.register(projectsRoutes);
+  await app.register(projectUnitsRoutes);
+  await app.register(membersRoutes);
   await app.register(projectTeamRoutes);
   await app.register(clinicalSupervisionRoutes);
   await app.register(neurodivergentIntakeRoutes);
   await app.register(carePrivacyRoutes);
   await app.register(auditRoutes);
   await app.register(invitationRoutes);
+  await app.register(agendaRoutes);
+  await app.register(documentRoutes);
+  await app.register(financeRoutes);
 
   return app;
 }
