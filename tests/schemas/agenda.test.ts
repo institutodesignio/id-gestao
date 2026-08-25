@@ -20,4 +20,11 @@ describe("Agenda schemas", () => {
   it("rejects empty appointment updates", () => {
     expect(updateAppointmentSchema.safeParse({}).success).toBe(false);
   });
+
+  it("requires an explanation for cancellation and no-show states", () => {
+    expect(updateAppointmentSchema.safeParse({ status: "CANCELLED" }).success).toBe(false);
+    expect(updateAppointmentSchema.safeParse({ status: "CANCELLED", cancellation_reason: "Solicitação da família" }).success).toBe(true);
+    expect(updateAppointmentSchema.safeParse({ status: "NO_SHOW" }).success).toBe(false);
+    expect(updateAppointmentSchema.safeParse({ status: "NO_SHOW", no_show_notes: "Ausência registrada após contato" }).success).toBe(true);
+  });
 });
