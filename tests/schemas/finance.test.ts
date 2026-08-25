@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { approveFinanceTransactionSchema, createFinanceAccountSchema, createFinanceTransactionSchema } from "../../src/schemas/finance.js";
+import { approveFinanceTransactionSchema, createFinanceAccountSchema, createFinanceTransactionSchema, updateFinanceTransactionSchema } from "../../src/schemas/finance.js";
 
 const category = "11111111-1111-4111-8111-111111111111";
 const costCenter = "22222222-2222-4222-8222-222222222222";
@@ -20,5 +20,10 @@ describe("Finance schemas", () => {
   it("accepts only the last four account digits", () => {
     expect(createFinanceAccountSchema.safeParse({ code: "BANCO", name: "Conta principal", account_type: "BANK", account_last_four: "1234" }).success).toBe(true);
     expect(createFinanceAccountSchema.safeParse({ code: "BANCO", name: "Conta principal", account_type: "BANK", account_last_four: "12345" }).success).toBe(false);
+  });
+
+  it("requires a reason when cancelling a transaction", () => {
+    expect(updateFinanceTransactionSchema.safeParse({ status: "CANCELLED" }).success).toBe(false);
+    expect(updateFinanceTransactionSchema.safeParse({ status: "CANCELLED", cancellation_reason: "Lançamento duplicado" }).success).toBe(true);
   });
 });
