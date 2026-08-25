@@ -21,7 +21,12 @@ export const updateDocumentTemplateSchema = z.object({
   field_schema: z.record(z.string(), z.unknown()).optional(),
   requires_approval: z.boolean().optional(),
   requires_signature: z.boolean().optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
+}).strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
+  .refine((value) => value.status !== "VOID" || Boolean(value.void_reason?.trim()), {
+    message: "void_reason is required when status is VOID",
+    path: ["void_reason"],
+  });
 
 export const createDocumentSchema = z.object({
   template_id: uuid.nullable().optional(),
