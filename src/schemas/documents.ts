@@ -21,12 +21,7 @@ export const updateDocumentTemplateSchema = z.object({
   field_schema: z.record(z.string(), z.unknown()).optional(),
   requires_approval: z.boolean().optional(),
   requires_signature: z.boolean().optional(),
-}).strict()
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
-  .refine((value) => value.status !== "VOID" || Boolean(value.void_reason?.trim()), {
-    message: "void_reason is required when status is VOID",
-    path: ["void_reason"],
-  });
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
 
 export const createDocumentSchema = z.object({
   template_id: uuid.nullable().optional(),
@@ -46,7 +41,12 @@ export const updateDocumentSchema = z.object({
   description: z.string().trim().max(2000).nullable().optional(),
   status: z.enum(["DRAFT", "READY_FOR_APPROVAL", "APPROVED", "SIGNED", "ARCHIVED", "VOID"]).optional(),
   void_reason: z.string().trim().max(2000).nullable().optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
+}).strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
+  .refine((value) => value.status !== "VOID" || Boolean(value.void_reason?.trim()), {
+    message: "void_reason is required when status is VOID",
+    path: ["void_reason"],
+  });
 
 export const createDocumentVersionSchema = z.object({
   content: z.record(z.string(), z.unknown()).optional(),
