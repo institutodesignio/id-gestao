@@ -8,6 +8,7 @@ Backend e banco preparados sem implementação visual. O Lovable deve consumir s
 
 - Usar o token Supabase do usuário no cabeçalho `Authorization: Bearer` da API.
 - Nunca expor `service_role` no frontend.
+- Nunca chamar o Storage diretamente com a sessão do usuário; usar somente as URLs temporárias emitidas pela API.
 - Respeitar as permissões retornadas por `GET /api/v1/me`.
 - Não exibir links de arquivos permanentes. Solicitar URL temporária de download.
 - Não armazenar conteúdo clínico, documental ou financeiro no `localStorage`.
