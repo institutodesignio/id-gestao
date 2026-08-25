@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createDocumentSchema, createDocumentVersionSchema, requestDocumentUploadSchema } from "../../src/schemas/documents.js";
+import { createDocumentSchema, createDocumentVersionSchema, requestDocumentUploadSchema, updateDocumentSchema } from "../../src/schemas/documents.js";
 
 describe("Document schemas", () => {
   it("accepts a confidential institutional document", () => {
@@ -16,5 +16,10 @@ describe("Document schemas", () => {
 
   it("rejects files above 25 MB", () => {
     expect(createDocumentVersionSchema.safeParse({ file_size_bytes: 25 * 1024 * 1024 + 1 }).success).toBe(false);
+  });
+
+  it("requires a reason when voiding a document", () => {
+    expect(updateDocumentSchema.safeParse({ status: "VOID" }).success).toBe(false);
+    expect(updateDocumentSchema.safeParse({ status: "VOID", void_reason: "Substituído por nova versão" }).success).toBe(true);
   });
 });
