@@ -30,16 +30,7 @@ export const updateAvailabilitySchema = z.object({
   valid_from: date.optional(),
   valid_until: date.nullable().optional(),
   is_active: z.boolean().optional(),
-}).strict()
-  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
-  .refine((value) => value.status !== "CANCELLED" || Boolean(value.cancellation_reason?.trim()), {
-    message: "cancellation_reason is required when status is CANCELLED",
-    path: ["cancellation_reason"],
-  })
-  .refine((value) => value.status !== "NO_SHOW" || Boolean(value.no_show_notes?.trim()), {
-    message: "no_show_notes is required when status is NO_SHOW",
-    path: ["no_show_notes"],
-  });
+}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
 
 export const createAppointmentSchema = z.object({
   unit_id: uuid.nullable().optional(),
@@ -82,4 +73,13 @@ export const updateAppointmentSchema = z.object({
   external_calendar_id: z.string().trim().max(255).nullable().optional(),
   external_event_id: z.string().trim().max(255).nullable().optional(),
   recurrence_key: z.string().trim().max(255).nullable().optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
+}).strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
+  .refine((value) => value.status !== "CANCELLED" || Boolean(value.cancellation_reason?.trim()), {
+    message: "cancellation_reason is required when status is CANCELLED",
+    path: ["cancellation_reason"],
+  })
+  .refine((value) => value.status !== "NO_SHOW" || Boolean(value.no_show_notes?.trim()), {
+    message: "no_show_notes is required when status is NO_SHOW",
+    path: ["no_show_notes"],
+  });
