@@ -1,5 +1,6 @@
 import "dotenv/config";
 import { z } from "zod";
+import { resolveCorsOrigins } from "./cors.js";
 
 const schema = z.object({
   NODE_ENV: z
@@ -39,8 +40,9 @@ export const config = {
   SUPABASE_SERVICE_ROLE_KEY: parsed.SUPABASE_SERVICE_ROLE_KEY,
   APP_PUBLIC_URL: parsed.APP_PUBLIC_URL,
 
-  corsOrigins: parsed.CORS_ORIGINS
-    .split(",")
-    .map((origin) => origin.trim())
-    .filter(Boolean),
+  corsOrigins: resolveCorsOrigins({
+    configuredOrigins: parsed.CORS_ORIGINS,
+    appPublicUrl: parsed.APP_PUBLIC_URL,
+    nodeEnv: parsed.NODE_ENV,
+  }),
 };
