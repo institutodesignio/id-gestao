@@ -89,7 +89,12 @@ export const updateFinanceTransactionSchema = z.object({
   funding_reference: z.string().trim().max(255).nullable().optional(),
   external_reference: z.string().trim().max(255).nullable().optional(),
   cancellation_reason: z.string().trim().max(2000).nullable().optional(),
-}).strict().refine((value) => Object.keys(value).length > 0, "At least one field must be provided");
+}).strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field must be provided")
+  .refine((value) => value.status !== "CANCELLED" || Boolean(value.cancellation_reason?.trim()), {
+    message: "cancellation_reason is required when status is CANCELLED",
+    path: ["cancellation_reason"],
+  });
 
 export const approveFinanceTransactionSchema = z.object({
   mark_as_paid: z.boolean().optional(),
