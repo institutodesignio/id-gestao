@@ -23,7 +23,7 @@ export async function projectTeamRoutes(app: FastifyInstance) {
     const ctx = await context(auth, reply);
     if (!ctx.ok) return ctx.response;
     if (!ctx.data.permissions.includes("project.read")) return reply.code(403).send({ error: "PERMISSION_DENIED" });
-    const { data, error } = await auth.supabase.from("project_team_members").select(`id, project_id, person_id, role_title, starts_at, ends_at, notes, created_at, updated_at, person:persons!project_team_members_person_fk(id, full_name, preferred_name, primary_email, primary_phone)`).eq("organization_id", ctx.data.organization.id).eq("project_id", params.data.projectId).is("deleted_at", null).order("role_title");
+    const { data, error } = await auth.supabase.from("project_team_members").select(`id, project_id, person_id, role_title, starts_at, ends_at, notes, created_at, updated_at, person:persons!project_team_members_person_id_fkey(id, full_name, preferred_name, primary_email, primary_phone)`).eq("organization_id", ctx.data.organization.id).eq("project_id", params.data.projectId).is("deleted_at", null).order("role_title");
     if (error) return reply.code(500).send({ error: "PROJECT_TEAM_LIST_FAILED" });
     return reply.send({ data: data ?? [] });
   });
