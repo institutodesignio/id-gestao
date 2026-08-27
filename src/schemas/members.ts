@@ -43,3 +43,9 @@ export type MembersQuery =
   z.infer<
     typeof membersQuerySchema
   >;
+
+export const updateMemberStatusSchema = z
+  .object({
+    status: z.enum(["ACTIVE", "INACTIVE"]),
+  })
+  .strict();
