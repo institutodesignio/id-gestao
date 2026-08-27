@@ -98,6 +98,51 @@ describe("member management routes", () => {
     await app.close();
   });
 
+  it("inactivates a member while preserving the record", async () => {
+    const members = builder({
+      data: {
+        id: memberId,
+        user_profile_id: profileId,
+        status: "ACTIVE",
+        user_profile: { auth_user_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
+        member_roles: [{ ends_at: null, role: { code: "TECHNICAL_PROFESSIONAL" } }],
+      },
+      error: null,
+    });
+    members.single.mockResolvedValue({
+      data: { id: memberId, status: "INACTIVE", ended_at: "2026-08-27" },
+      error: null,
+    });
+    authMock.mockResolvedValue(authenticated(["user.update"], { organization_members: members }));
+
+    const app = await buildTestApp();
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/members/${memberId}`,
+      payload: { status: "INACTIVE" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ data: { id: memberId, status: "INACTIVE" } });
+    expect(members.update).toHaveBeenCalledWith(
+      expect.objectContaining({ status: "INACTIVE", updated_by: userId }),
+    );
+    await app.close();
+  });
+
+  it("denies member status changes without user.update", async () => {
+    authMock.mockResolvedValue(authenticated([], {}));
+    const app = await buildTestApp();
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/v1/members/${memberId}`,
+      payload: { status: "INACTIVE" },
+    });
+    expect(response.statusCode).toBe(403);
+    expect(response.json().error).toBe("PERMISSION_DENIED");
+    await app.close();
+  });
+
   it("assigns an active role to a member", async () => {
     const members = builder({ data: { id: memberId }, error: null });
     const roles = builder({
