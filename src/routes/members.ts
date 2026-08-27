@@ -15,6 +15,7 @@ import {
 
 import {
   membersQuerySchema,
+  updateMemberStatusSchema,
 } from "../schemas/members.js";
 
 const memberParamsSchema = z.object({
@@ -332,6 +333,10 @@ export async function membersRoutes(
               person_id,
               user_profile_id,
               status,
+              member_type,
+              job_title,
+              professional_council,
+              professional_registration,
               joined_at,
               ended_at,
               created_at,
@@ -500,6 +505,18 @@ export async function membersRoutes(
               status:
                 row.status,
 
+              member_type:
+                row.member_type,
+
+              job_title:
+                row.job_title,
+
+              professional_council:
+                row.professional_council,
+
+              professional_registration:
+                row.professional_registration,
+
               joined_at:
                 row.joined_at,
 
@@ -601,7 +618,8 @@ export async function membersRoutes(
       const { data, error } = await auth.supabase
         .from("organization_members")
         .select(`
-          id, person_id, user_profile_id, status, joined_at, ended_at, created_at,
+          id, person_id, user_profile_id, status, member_type, job_title,
+          professional_council, professional_registration, joined_at, ended_at, created_at,
           person:persons (id, full_name, preferred_name, primary_email),
           user_profile:user_profiles (id, auth_user_id, email),
           member_roles (
@@ -641,6 +659,10 @@ export async function membersRoutes(
         user_profile_id: data.user_profile_id,
         user_id: userProfile?.auth_user_id ?? null,
         status: data.status,
+        member_type: data.member_type,
+        job_title: data.job_title,
+        professional_council: data.professional_council,
+        professional_registration: data.professional_registration,
         joined_at: data.joined_at,
         ended_at: data.ended_at,
         created_at: data.created_at,
@@ -654,6 +676,102 @@ export async function membersRoutes(
       });
     }
   );
+
+  // ==========================================================
+  // PATCH /api/v1/members/:memberId
+  // ==========================================================
+
+  app.patch("/api/v1/members/:memberId", async (request, reply) => {
+    const auth = await requireAuthenticatedUser(request);
+    if (!auth.ok) return reply.code(auth.statusCode).send({ error: auth.error });
+
+    const parsedParams = memberParamsSchema.safeParse(request.params);
+    if (!parsedParams.success) return reply.code(400).send({ error: "INVALID_MEMBER_ID" });
+
+    const parsedBody = updateMemberStatusSchema.safeParse(request.body);
+    if (!parsedBody.success) {
+      return reply.code(400).send({
+        error: "INVALID_MEMBER_DATA",
+        details: parsedBody.error.flatten(),
+      });
+    }
+
+    const contextResult = await loadContext(auth, reply);
+    if (!contextResult.ok) return contextResult.response;
+    const { organization, permissions } = contextResult.context;
+    if (!permissions.includes("user.update")) {
+      return reply.code(403).send({ error: "PERMISSION_DENIED" });
+    }
+
+    const { data: member, error: memberError } = await auth.supabase
+      .from("organization_members")
+      .select(`
+        id, user_profile_id, status,
+        user_profile:user_profiles(auth_user_id),
+        member_roles!inner(role:roles(code), ends_at)
+      `)
+      .eq("id", parsedParams.data.memberId)
+      .eq("organization_id", organization.id)
+      .maybeSingle();
+
+    if (memberError) return reply.code(500).send({ error: "MEMBER_READ_FAILED" });
+    if (!member) return reply.code(404).send({ error: "MEMBER_NOT_FOUND" });
+
+    const targetProfile = singleRelation(member.user_profile);
+    if (
+      parsedBody.data.status === "INACTIVE" &&
+      targetProfile?.auth_user_id === auth.user.id
+    ) {
+      return reply.code(409).send({ error: "SELF_DEACTIVATION_FORBIDDEN" });
+    }
+
+    const activeRoles = (member.member_roles ?? []).filter(
+      (assignment: any) =>
+        !assignment.ends_at && singleRelation(assignment.role)?.code === "ADMINISTRATOR",
+    );
+    if (parsedBody.data.status === "INACTIVE" && activeRoles.length > 0) {
+      if (!permissions.includes("role.manage")) {
+        return reply.code(403).send({ error: "ROLE_ASSIGNMENT_FORBIDDEN" });
+      }
+      const { count, error: countError } = await auth.supabase
+        .from("organization_members")
+        .select("id, member_roles!inner(role:roles!inner(code), ends_at)", {
+          count: "exact",
+          head: true,
+        })
+        .eq("organization_id", organization.id)
+        .eq("status", "ACTIVE")
+        .eq("member_roles.role.code", "ADMINISTRATOR")
+        .is("member_roles.ends_at", null)
+        .neq("id", member.id);
+      if (countError) return reply.code(500).send({ error: "ADMINISTRATOR_COUNT_FAILED" });
+      if ((count ?? 0) === 0) {
+        return reply.code(409).send({ error: "LAST_ADMINISTRATOR_REQUIRED" });
+      }
+    }
+
+    const now = new Date().toISOString();
+    const { data: updated, error: updateError } = await auth.supabase
+      .from("organization_members")
+      .update({
+        status: parsedBody.data.status,
+        ended_at: parsedBody.data.status === "INACTIVE" ? now.slice(0, 10) : null,
+        updated_at: now,
+        updated_by: auth.user.id,
+      })
+      .eq("id", member.id)
+      .eq("organization_id", organization.id)
+      .select(
+        "id,status,member_type,job_title,professional_council,professional_registration,joined_at,ended_at,updated_at",
+      )
+      .single();
+
+    if (updateError) {
+      request.log.error({ code: updateError.code }, "Failed to update member status");
+      return reply.code(500).send({ error: "MEMBER_UPDATE_FAILED" });
+    }
+    return reply.send({ data: updated });
+  });
 
   // ==========================================================
   // POST /api/v1/members/:memberId/roles
