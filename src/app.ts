@@ -24,6 +24,7 @@ import { invitationRoutes } from "./routes/invitations.js";
 import { agendaRoutes } from "./routes/agenda.js";
 import { documentRoutes } from "./routes/documents.js";
 import { financeRoutes } from "./routes/finance.js";
+import { rolesRoutes } from "./routes/roles.js";
 
 export async function buildApp() {
   const app = Fastify({
@@ -68,6 +69,7 @@ export async function buildApp() {
   await app.register(agendaRoutes);
   await app.register(documentRoutes);
   await app.register(financeRoutes);
+  await app.register(rolesRoutes);
 
   return app;
 }
