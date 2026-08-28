@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { createSystemSupabaseClient } from "../plugins/supabase.js";
 
 export async function healthRoutes(app: FastifyInstance) {
@@ -12,6 +13,12 @@ export async function healthRoutes(app: FastifyInstance) {
     const supabase = createSystemSupabaseClient();
     const { error } = await supabase.from("organizations").select("id", { head: true, count: "exact" }).limit(1);
     if (error) return reply.code(503).send({ ok: false, service: "id-gestao-api", dependency: "supabase" });
-    return reply.send({ ok: true, service: "id-gestao-api", dependency: "supabase", timestamp: new Date().toISOString() });
+    return reply.send({
+      ok: true,
+      service: "id-gestao-api",
+      dependency: "supabase",
+      capabilities: { adminOperations: Boolean(config.SUPABASE_SERVICE_ROLE_KEY) },
+      timestamp: new Date().toISOString(),
+    });
   });
 }
