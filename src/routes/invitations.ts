@@ -54,14 +54,22 @@ export async function invitationRoutes(app: FastifyInstance) {
     const admin = createAdminSupabaseClient();
     if (!admin) return reply.code(503).send({ error: "ADMIN_CLIENT_NOT_CONFIGURED" });
 
-    const { data: role, error: roleError } = await admin
+    // Validate the selected role through the authenticated organization context,
+    // using the same visibility rules as GET /api/v1/roles. The admin client is
+    // reserved for provisioning the Auth user and institutional records.
+    const { data: role, error: roleError } = await auth.supabase
       .from("roles")
       .select("id,code")
       .eq("id", body.data.role_id)
+      .eq("status", "ACTIVE")
       .or(`organization_id.is.null,organization_id.eq.${context.data.organization.id}`)
       .is("deleted_at", null)
       .maybeSingle();
-    if (roleError || !role) return reply.code(404).send({ error: "ROLE_NOT_FOUND" });
+    if (roleError) {
+      request.log.error({ code: roleError.code }, "Invitation role lookup failed");
+      return reply.code(500).send({ error: "ROLE_LOOKUP_FAILED" });
+    }
+    if (!role) return reply.code(404).send({ error: "ROLE_NOT_FOUND" });
     if (
       role.code === "ADMINISTRATOR" &&
       !context.data.permissions.includes("role.manage")
