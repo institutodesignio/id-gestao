@@ -1,4 +1,11 @@
 export const CANONICAL_PRODUCTION_ORIGIN =
+  "https://idgestao.institutodesignio.org";
+
+/**
+ * Mantido temporariamente durante a migração para evitar interromper sessões
+ * abertas no domínio anterior. Remover após o redirecionamento definitivo.
+ */
+export const LEGACY_PRODUCTION_ORIGIN =
   "https://idgestao.gestaoaviva.com.br";
 
 type NodeEnvironment = "development" | "test" | "production";
@@ -24,7 +31,7 @@ export function resolveCorsOrigins({
   }
 
   if (nodeEnv === "production") {
-    origins.push(CANONICAL_PRODUCTION_ORIGIN);
+    origins.push(CANONICAL_PRODUCTION_ORIGIN, LEGACY_PRODUCTION_ORIGIN);
   }
 
   return [...new Set(origins)];
