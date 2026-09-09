@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   CANONICAL_PRODUCTION_ORIGIN,
+  LEGACY_PRODUCTION_ORIGIN,
   resolveCorsOrigins,
 } from "../src/cors.js";
 
@@ -20,26 +21,27 @@ describe("resolveCorsOrigins", () => {
     ]);
   });
 
-  it("always allows the canonical application origin in production", () => {
-    expect(
-      resolveCorsOrigins({
-        configuredOrigins: "https://preview--idgestaoplaforma.lovable.app",
-        nodeEnv: "production",
-      }),
-    ).toContain(CANONICAL_PRODUCTION_ORIGIN);
+  it("allows the canonical and legacy origins during production migration", () => {
+    const origins = resolveCorsOrigins({
+      configuredOrigins: "https://preview--idgestaoplaforma.lovable.app",
+      nodeEnv: "production",
+    });
+
+    expect(origins).toContain(CANONICAL_PRODUCTION_ORIGIN);
+    expect(origins).toContain(LEGACY_PRODUCTION_ORIGIN);
   });
 
-  it("does not duplicate the canonical application origin", () => {
+  it("does not duplicate production origins", () => {
     expect(
       resolveCorsOrigins({
-        configuredOrigins: CANONICAL_PRODUCTION_ORIGIN,
+        configuredOrigins: `${CANONICAL_PRODUCTION_ORIGIN},${LEGACY_PRODUCTION_ORIGIN}`,
         appPublicUrl: `${CANONICAL_PRODUCTION_ORIGIN}/app`,
         nodeEnv: "production",
       }),
-    ).toEqual([CANONICAL_PRODUCTION_ORIGIN]);
+    ).toEqual([CANONICAL_PRODUCTION_ORIGIN, LEGACY_PRODUCTION_ORIGIN]);
   });
 
-  it("does not add the production origin outside production", () => {
+  it("does not add production origins outside production", () => {
     expect(
       resolveCorsOrigins({
         configuredOrigins: "http://localhost:5173",
